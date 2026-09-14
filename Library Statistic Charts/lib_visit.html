@@ -1,0 +1,362 @@
+<head>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  	<script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+ 	<style>
+		/* Encloses all elements. Keeps them in the middle of the page. */
+    		div.page {
+			width:55%;
+			margin-left:auto;
+			margin-right:auto
+		}
+		div.page h1 {
+			margin-top:30px;
+		}
+		div.page h2 {
+			margin-top:20px;
+		}
+		.data-nav {
+			padding:10px;
+			border-bottom:2px solid black;
+			margin-top: 20px;
+			font-size:15pt;
+		}
+		.data-nav a {
+			color: red;
+		}
+		.data-nav a:hover {
+			text-decoration: underline;
+		}
+		/* Encompases the chart itself and other related elements */
+		.chart-section {
+			height:450px;
+			display:block;
+		}
+		/* Only contains the chart itself */
+		.chart-container {
+			position: relative;
+			/* margin:auto;  */
+			display:block;
+			height:400px;
+		}
+		/* Used for text describing stats(typically ones that are animated) */
+		.info {
+			font-size:25px;
+			font-weight:bold;
+		}
+		/* Styles all animated numbers */
+		.numAnim {
+			color: red !important;
+			font-size:40px;
+			font-weight: normal;
+		}
+
+	</style>	
+</head>
+
+<body>
+ 	<div class="page">
+ 	<nav class="data-nav">
+		<a href="https://library-dev.njit.edu/library-collections-0">Collections</a> |
+		<a href="https://library-dev.njit.edu/library-visitors">Library Visitors</a> | 
+		<a href="https://library-dev.njit.edu/librarywebvisit">Website Visitors</a> |
+		<a href="https://library-dev.njit.edu/library-spaces">Spaces</a>
+	</nav>
+
+	<!-- Header present throughout all data viz pages -->
+	<div>
+		<h1>Usage Statistics</h1>
+  		<p>A selection of data that may help users, partners and constituents understand Library usage, holdings, spaces, and instruction. These data have been compiled from a variety of sources for the last several fiscal years.</p> 
+	</div>
+
+	<h2>Library Visitors</h2>
+
+  	<div>
+		<p class="info"><span id="yearVisit2024"></span> Combined Library Visitors:&ensp; <span id="totalVisit2024" class="numAnim"></span></p>
+  	</div>
+
+	<!-- **Van Houten Library(VHL) Data** -->
+	<div class="chart-section">
+		<h4>Van Houten Library</h4>
+  		<div class="chart-container">
+    			<canvas id="vhlChart"></canvas>
+  		</div>
+	</div>
+
+	<!-- **Littman Library(LML) Data** -->
+	<div class="chart-section">
+		<h4>Littman Library</h4>
+  		<div class="chart-container">
+    			<canvas id="lmlChart"></canvas>
+  		</div>
+	</div>
+
+  	</div>
+
+<!-- **************************Constructs both VHL and LML visitor charts**********************************************-->
+<script>
+	async function main() {
+		// ****** Check README for instructions on how to get the sheetID ******
+		const sheetID = ""
+
+		const sheetName1 = "In-Person Visitors(Van Houten)"
+		const json1 = await processFileData(sheetID, sheetName1)
+
+		const sheetName2 = "In-Person Visitors(Littman)"
+		const json2 = await processFileData(sheetID, sheetName2)
+		
+		const sheetName3 = "In-Person Visitors(Combined)"
+		const json3 = await processFileData(sheetID, sheetName3)
+
+		// loads animated numbers
+		loadNumbers(json3);
+
+		// loads charts
+		constructCharts([json1, json2]);
+	}
+
+	async function csvToJson(csvText) {
+		const textclean = csvText.replace(/(?<=\d),(?=\d)/g, ""); // uses lookforward and backward to remove commas 
+		const textclean2 = textclean.replace(/"/g, ""); // removing extra quotes
+
+		const rows = textclean2.split('\n');
+		let json = rows.map(row => row.split(',').slice(1));
+		json = json.map(row => row.map(x => isNaN(x) || x === "" ? x : parseInt(x))); //converting to ints
+		json = json.map(row => row.map(x => typeof x === "string" ? x.trim() : x)); //trimming whitespace from strings
+		return json.map(row => row.map(x => x === "" ? null : x)); //setting empty strings to null
+	}
+
+	async function processFileData(sheetID, sheetName) {
+		const url = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+		
+		const file = await (await fetch(url));
+		const text = await file.text();
+		const json = await csvToJson(text);
+
+		console.log(json);
+		return json;
+	}
+
+	async function loadNumbers(json) {
+		//Latest Year cummulative vals for Combined
+		const availableYears = [];
+		for(let i=3; (i<json.length && json[i].length>1); i+=4) {
+			availableYears.push(i);
+		}
+		const start = availableYears[availableYears.length-1]
+
+		const year24 = document.getElementById('yearVisit2024');
+		year24.textContent = json[start-3][0].trim().split(/\s+/).pop();
+		const tot24 = document.getElementById('totalVisit2024');
+		tot24.textContent = parseInt(json[start][13]);
+
+		numberAnim();
+	}
+
+	async function constructCharts(jsons) {
+		const jsonVHL = jsons[0];
+		const jsonLML = jsons[1];
+
+		const labelsIndex = 0;
+		// Only get 4 latest years for each chart
+		const numOfYears = 4;
+		const availableYearsVHL = []
+		for(let i=1; (i<jsonVHL.length && jsonVHL[i].length>1); i+=1) {
+			availableYearsVHL.push(i);
+		}
+		const startVHL = availableYearsVHL[availableYearsVHL.length - numOfYears]
+
+		const availableYearsLML = []
+		for(let i=1; (i<jsonLML.length && jsonLML[i].length>1); i+=1) {
+			availableYearsLML.push(i);
+		}
+		const startLML = availableYearsLML[availableYearsLML.length - numOfYears]
+		
+		//***** Configures VHL chart *****
+		var configVHL = {
+			type: "line",
+
+			data: {
+				labels: jsonVHL[labelsIndex].slice(1,13),
+				datasets: [
+					{
+						label: jsonVHL[startVHL][0],
+						data: jsonVHL[startVHL].slice(1, 13),
+						order: 4,
+						backgroundColor: "transparent",borderColor:'#d3d3d3', pointBackgroundColor:'#d3d3d3'
+					},
+					{
+						label: jsonVHL[startVHL+1][0],
+						data: jsonVHL[startVHL+1].slice(1, 13),
+						order: 3,
+						backgroundColor: "transparent",borderColor:'#d3d3d3', pointBackgroundColor:'#d3d3d3'
+					},
+					{
+						label: jsonVHL[startVHL+2][0],
+						data: jsonVHL[startVHL+2].slice(1, 13),
+						order: 2,
+						backgroundColor: "transparent",borderColor:'rgb(222, 123, 123)', pointBackgroundColor:'rgb(222, 123, 123)'
+					},
+					{
+						label: jsonVHL[startVHL+3][0],
+						data: jsonVHL[startVHL+3].slice(1, 13),
+						order: 1,
+						backgroundColor: "transparent",borderColor:'rgb(222, 0, 0)', pointBackgroundColor:'rgb(222, 0, 0)'
+					},
+				],
+			},
+			options: {
+				maintainAspectRatio:false,
+				responsive:true,
+				scales: {
+					x: {
+						title: {
+							display: true,
+							text: "Month",
+						},
+					},
+					y: {
+						// max:50000,
+						id: "year",
+						grid: {
+							drawOnChartArea: false,
+						},
+						title: {
+							display: true,
+							text: "Visitors",
+						},
+					},
+				},
+				plugins: {
+					title: {
+						display: false,
+						text: "Gate Count",
+					},
+				},
+			},
+		};
+
+		//***** Configures LML chart *****
+		var configLML = {
+			type: "line",
+
+			data: {
+				labels: jsonLML[labelsIndex].slice(1,13),
+				datasets: [
+				{
+					label: jsonLML[startLML][0],
+					data: jsonLML[startLML].slice(1, 13),
+					order: 4,
+					backgroundColor: "transparent",borderColor:'#d3d3d3', pointBackgroundColor:'#d3d3d3'
+				},
+				{
+					label: jsonLML[startLML+1][0],
+					data: jsonLML[startLML+1].slice(1, 13),
+					order: 3,
+					backgroundColor: "transparent",borderColor:'#d3d3d3', pointBackgroundColor:'#d3d3d3'
+				},
+				{
+					label: jsonLML[startLML+2][0],
+					data: jsonLML[startLML+2].slice(1, 13),
+					order: 2,
+					backgroundColor: "transparent",borderColor:'rgb(111, 126, 173)', pointBackgroundColor:'rgb(111, 126, 173)'
+				},
+				{
+					label: jsonLML[startLML+3][0],
+					data: jsonLML[startLML+3].slice(1, 13),
+					order: 1,
+					backgroundColor: "transparent",borderColor:'rgb(0, 30, 128)', pointBackgroundColor:'rgb(0, 30, 128)'
+				},
+				],
+			},
+			options: {
+				maintainAspectRatio:false,
+				responsive:true,
+				title: {
+					display: false,
+					text: "Gate Count",
+				},
+				scales: {
+					x: {
+						title: {
+							display:true,
+							text: "Month",
+						},
+					},
+					y: {
+						// max:20000,
+						id: "year",
+						grid: {
+							drawOnChartArea: false,
+						},
+						title: {
+							display:true,
+							text: "Visitors",
+						},
+					},
+				},
+			},
+		};
+
+
+		// Defines global line graph properties(straight lines, no fill, no background)
+		Chart.defaults.elements.line.backgroundColor = "transparent";
+		Chart.defaults.elements.line.tension = 0;
+		Chart.defaults.elements.line.fill = false;
+
+		// Adds the charts to the appropriate canvas html element 
+		var ctxVHL = document.getElementById("vhlChart").getContext("2d");
+		window.vhlChart = new Chart(ctxVHL, configVHL);  
+
+		var ctxLML = document.getElementById("lmlChart").getContext("2d");
+		window.lmlChart = new Chart(ctxLML, configLML);
+	
+	}
+
+	/*
+	* All elements with class "numAnim" will increment.
+	* Initially increments by a large amount until it reaches 75% of target val-25. 
+	* 	It then increments by a small amount until only 25 remains.
+	* 	From then on, numbers only increment by 1.
+	* Percentages were used to make all the numbers end around the same time, regardless of their value.
+	*
+	* Must run after excel sheets are processed, and the appropriate vals are placed into the page. 
+	* 	Otherwise the numAnim tags wont have numbers to increment.
+	*/
+	function numberAnim() {
+		var numbers = document.querySelectorAll(".numAnim");
+		numbers.forEach(function(num) {
+			var target = parseInt(num.textContent);
+			var target_reduced = target - 25;
+			var incrementL = target_reduced * 0.015;
+			var incrementS = target_reduced * 0.005;
+			var curr = 0;
+
+			function update() {
+				if(curr >= target_reduced) {
+					curr++;
+				}
+				else if(curr > target_reduced *.75 && curr < target_reduced) {
+					curr += incrementS;
+				}
+				else {
+					curr += incrementL;
+				}
+				if(curr >= target) {
+					num.textContent = target.toLocaleString();
+				}
+				else {
+					num.textContent = Math.round(curr).toLocaleString();
+					setTimeout(function() {requestAnimationFrame(update);}, 1);
+				}
+			}
+			update();
+		});
+	}
+
+	main();
+
+</script>
+
+
+</body>
