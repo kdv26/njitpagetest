@@ -1,0 +1,533 @@
+<head>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  	<script lang="javascript" src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+	
+ 	<style>
+		/* Encloses all elements. Keeps them in the middle of the page. */
+    		div.page {
+			width:55%;
+			margin-left:auto;
+			margin-right:auto
+		}
+		div.page h1 {
+			margin-top:30px;
+		}
+		div.page h2 {
+			margin-top:20px;
+		}
+		.data-nav {
+			padding:10px;
+			border-bottom:2px solid black;
+			margin-top: 20px;
+			font-size:15pt;
+		}
+		.data-nav a {
+			color: red;
+		}
+		.data-nav a:hover {
+			text-decoration: underline;
+		}
+		/* Encompases the chart itself and other related elements */
+		.chart-section {
+			height:475px;
+			display:block;
+		}
+		/* Only contains the chart itself */
+		.chart-container {
+			position: relative; 
+			display:block;
+			height:400px;
+		}
+		/* Used for text describing stats(typically ones that are animated) */
+		.info {
+			font-weight:bold;
+			color: gray;
+		}
+		/* Styles all animated numbers */
+		.numAnim {
+			color: red !important;
+			font-size:25px;
+		}
+		/* Prevents shakingd uring number animations
+		.data-table {
+			table-layout:fixed;
+		}
+		/*
+		@media screen and (max-width: 990px) {
+			.data-table {
+				width:50%;
+			}
+			td, th {
+				font-size: 5pt;
+			}
+		}
+		*/
+	
+	</style>	
+</head>
+
+<body>
+ 	<div class="page">
+ 	<nav class="data-nav">
+		<a href="https://library-dev.njit.edu/library-collections-0">Collections</a> |
+		<a href="https://library-dev.njit.edu/library-visitors">Library Visitors</a> | 
+		<a href="https://library-dev.njit.edu/librarywebvisit">Website Visitors</a> |
+		<a href="https://library-dev.njit.edu/library-spaces">Spaces</a>
+	</nav>
+
+  	<!-- Header present throughout all data viz pages -->
+	<div>
+		<h1>Usage Statistics</h1>
+  		<p>A selection of data that may help users, partners and constituents understand Library usage, holdings, spaces, and instruction. These data have been compiled from a variety of sources for the last several fiscal years.</p> 
+	</div>
+
+	<h2>Collections Use</h2>
+
+	<!-- **Collections data**-->
+	<h4>Loans, Browses, Renewals, and Returns</h4>
+	<table id="collecInfo" class="data-table">
+		<thead>
+		<tr>
+			<th class="info">Year</th>
+			<th class="info">Loans</th>
+			<th class="info">Browses</th>
+			<th class="info">Renewals</th>
+			<th class="info">Returns</th>
+		</tr>
+		</thead>
+		
+		<!-- Rows to be populated with excel data -->
+		<tbody>
+		</tbody>
+	</table> 
+	<br>
+
+	<div class="chart-section">
+		<div style="width:50%; display:flex;">
+			<span>Fiscal Year: </span>
+    			<select name="collecYear" id="collecYear" onchange="collecYearChoice(this.value)">
+      				<option value="2024" selected>2024</option>
+      				<option value="2023">2023</option>
+      				<option value="2022">2022</option>
+      				<option value="2021">2021</option>
+    			</select>
+		</div>
+  		<div class="chart-container">
+    			<canvas id="collecChart"></canvas>
+  		</div>
+		
+	</div>
+
+	<!-- **Inter-Library data**-->
+	<h4>Inter-Library Loans</h4>
+	<table id="interInfo" class="data-table>
+		<thead>
+		<tr>
+			<th class="info"></th> <!-- blank needed here, not sure why though -->
+			<th class="info">Year</th>
+			<th class="info">Borrowing</th>
+			<th class="info">Lending</th>
+			<th class="info">Document Delivery</th>
+		</tr>
+		</thead>
+		
+		<!-- Rows to be populated with excel data -->
+		<tbody>
+		</tbody>
+	</table> 
+	<br>
+
+	<div class="chart-section">
+		<div style="width:50%; display:flex;">
+			<span>Fiscal Year: </span>
+    			<select name="interYear" id="interYear" onchange="interYearChoice(this.value)">
+      				<option value="2024">2024</option>
+      				<option value="2023">2023</option>
+      				<option value="2022">2022</option>
+      				<option value="2021">2021</option>
+    			</select>
+		</div>
+  		<div class="chart-container">
+    			<canvas id="interChart"></canvas>
+  		</div>
+		
+	</div>
+
+
+  	</div>
+	
+	
+
+<!-- ************************************* Loans/browses/return/renewal & Interlibrary Graph ************************************** -->
+<script>
+	// Exporting data -- Sheets: "Loans, Renewals, Browses"[2] and "Inter Library Loans"[3]
+	var currCollectChart;
+	var currInterChart;
+
+	function splitJsonHeader(json) {
+		const header = json[0];
+		const data = json.slice(1);
+
+		const headersplitIndex = 3; // assuming the title is 3 long, this can be changed if needed
+		let head1 = header.slice(0, headersplitIndex);
+		let head2 = header.slice(headersplitIndex);
+
+		return [head1,head2].concat(data);
+	}
+
+	async function main() {
+		// ****** Check README for instructions on how to get the sheetID ******
+		const sheetID = ""
+
+		const collectSheetName = "Loans, Renewals, Browses";
+		let collectJsonTemp = await processFileData(sheetID, collectSheetName);
+		globalThis.collectJson = splitJsonHeader(collectJsonTemp);
+		const collectDefaultYear = document.getElementById("collecYear").value;
+		collecYearChoice(collectDefaultYear);
+
+		const interSheetName = "Inter Library(Filled)"
+		let interJsonTemp = await processFileData(sheetID, interSheetName);
+		globalThis.interJson = splitJsonHeader(interJsonTemp);
+		const interDefaultYear = document.getElementById("interYear").value;
+		interYearChoice(interDefaultYear);
+
+		console.log(globalThis.collectJson);
+		console.log(globalThis.interJson);
+
+		loadNumbers();
+	}
+
+	async function processFileData(sheetID, sheetName) {
+		const url = `https://docs.google.com/spreadsheets/d/${sheetID}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+		
+		const file = await (await fetch(url));
+		const text = await file.text();
+		const json = await csvToJson(text);
+
+		return json;
+	}
+
+	async function csvToJson(csvText) {
+		const textclean = csvText.replace(/(?<=\d),(?=\d)/g, ""); // uses lookforward and backward to remove commas 
+		const textclean2 = textclean.replace(/"/g, ""); // removing extra quotes
+
+		const rows = textclean2.split('\n');
+		let json = rows.map(row => row.split(',').slice(1));
+		json = json.map(row => row.map(x => isNaN(x) || x === "" ? x : parseInt(x))); //converting to ints
+		json = json.map(row => row.map(x => typeof x === "string" ? x.trim() : x)); //trimming whitespace from strings
+		return json.map(row => row.map(x => x === "" ? null : x)); //setting empty strings to null
+	}
+
+	// ****FOR COLLECTIONS CHARTS
+	async function collectConstructChart(loc) {
+		labels = collectJson[1].slice(1,13);
+		// loc is the starting row for a given year
+		//***** Configures Collections Use chart *****
+		let configCollect = {
+			type: "bar",
+
+			data: {
+				labels: labels,
+				datasets: [
+					{
+						// Loans
+						type: "line",
+						label: collectJson[loc+1][0],
+						data: collectJson[loc+1].slice(1, 13),
+						order: 1,
+						backgroundColor: "transparent",borderColor:'rgb(222, 0, 0)', pointBackgroundColor:'rgb(222, 0, 0)'
+					},
+					{
+						// Renewals
+						label: collectJson[loc+2][0],
+						data: collectJson[loc+2].slice(1, 13),
+						order: 2,
+						backgroundColor:'rgb(155, 164, 194)'
+					},
+					{
+						// Browses
+						label: collectJson[loc+3][0],
+						data: collectJson[loc+3].slice(1, 13),
+						order: 3,
+						backgroundColor:'rgb(111, 126, 173)'
+					},
+					{
+						// Returns
+						label: collectJson[loc+4][0],
+						data: collectJson[loc+4].slice(1, 13),
+						order: 4,
+						backgroundColor:'rgb(63, 84, 150)'
+					},
+				],
+			},
+			options: {
+				maintainAspectRatio:false,
+				responsive:true,
+				scales: {
+					x: {
+						title: {
+							display: true,
+							text: "Month",
+						},
+					},
+					y: {
+						// max:50000,
+						id: "amount",
+						grid: {
+							drawOnChartArea: false,
+						},
+						title: {
+							display: true,
+							text: "Amount",
+						},
+					},
+				},
+				plugins: {
+					title: {
+						display: true,
+						text: collectJson[loc][0],
+					},
+				},
+			},
+		};
+
+
+		// This isn't made to run when the window is loaded. Otherwise the graphs wouldn't show up
+		// Defines global line graph properties(straight lines, no fill, no background)
+		Chart.defaults.elements.line.backgroundColor = "transparent";
+		Chart.defaults.elements.line.tension = 0;
+		Chart.defaults.elements.line.fill = false;
+
+		// Adds the charts to the appropriate canvas html element 
+		let ctx = document.getElementById("collecChart").getContext("2d");
+		currCollectChart = new Chart(ctx, configCollect);
+		window.collecChart =  currCollectChart;
+	
+	}
+
+	async function collecYearChoice(yearSelected) {
+		yearName = "FY" + yearSelected;
+
+		// checks for all available years in the sheet
+		const availableYears = {}
+		for(let i=1; i<collectJson.length; i+=5) {
+			availableYears[collectJson[i][0]] = i;
+		}
+
+		if(!availableYears[yearName]) {
+			return;
+		}
+
+		if(currCollectChart) {
+			currCollectChart.destroy();
+		}
+		collectConstructChart(availableYears[yearName]);
+	}
+
+	// ****FOR INTERLIBRARY CHARTS
+	async function interConstructChart(loc) {
+		labels = interJson[1].slice(1,13);
+		//***** Configures VHL chart *****
+		var configInter = {
+			type: "line",
+			data: {
+				labels: labels,
+				datasets: [
+					{
+						// Borrowing
+						label: interJson[loc+1][0],
+						data: interJson[loc+1].slice(1, 13),
+						order: 1,
+						backgroundColor: "transparent",borderColor:'rgb(155, 164, 194)', pointBackgroundColor:'rgb(155, 164, 194)'
+					},
+					{
+						// Lending
+						label: interJson[loc+2][0],
+						data: interJson[loc+2].slice(1, 13),
+						order: 2,
+						backgroundColor: "transparent",borderColor:'rgb(111, 126, 173)', pointBackgroundColor:'rgb(111, 126, 173)'
+					},
+					{
+						// Document Delivery
+						label: interJson[loc+3][0],
+						data: interJson[loc+3].slice(1, 13),
+						order: 3,
+						backgroundColor: "transparent",borderColor:'rgb(63, 84, 150)', pointBackgroundColor:'rgb(63, 84, 150)'
+					},
+				],
+			},
+			options: {
+				maintainAspectRatio:false,
+				responsive:true,
+				scales: {
+					x: {
+						title: {
+							display: true,
+							text: "Month",
+						},
+					},
+					y: {
+						// max:50000,
+						id: "year",
+						grid: {
+							drawOnChartArea: false,
+						},
+						title: {
+							display: true,
+							text: "Amount",
+						},
+					},
+				},
+				plugins: {
+					title: {
+						display: true,
+						text: interJson[loc][0],
+					},
+				},
+			},
+		};
+
+		// This isn't made to run when the window is loaded. Otherwise the graphs wouldn't show up
+		// Defines global line graph properties(straight lines, no fill, no background)
+		Chart.defaults.elements.line.backgroundColor = "transparent";
+		Chart.defaults.elements.line.tension = 0;
+		Chart.defaults.elements.line.fill = false;
+
+		// Adds the charts to the appropriate canvas html element 
+		let ctx = document.getElementById("interChart").getContext("2d");
+		currInterChart = new Chart(ctx, configInter);
+		window.interChart =  currInterChart;
+	}
+
+	async function interYearChoice(yearSelected) {
+		yearName = "FY" + yearSelected;
+
+		// checks for all available years in the sheet
+		// the initial value for `var i` was found by inspecting the json
+		// Years are 7 rows apart from each other
+		const availableYears = {}
+		for(let i=1; i<interJson.length; i+=4) {
+			availableYears[interJson[i][0]] = i;
+		}
+	
+		if(!availableYears[yearName]) {
+			return;
+		}
+
+		if(currInterChart) {
+			currInterChart.destroy();
+		}
+		interConstructChart(availableYears[yearName]);
+	}
+
+	// ****FOR BOTH CHARTS
+	/*
+	* Reads from 2 different sheets from the same file. Each sheet is placed into their own JSON.
+	* When extracting data from the JSON, take into account the blank line at the top of the excel sheets, and that
+	*	 it goes by zero-indexing. This means that `row = excelRow - 2` in json[row][col]
+	* Data is then appended to the table and given appropriate CSS classes
+	*
+	* File: Website-Analytics-File.xlsx
+	* 
+	* sheetName is an array with 2 string variables. sheetName[0] = loans sheet
+	* 												 sheetName[1] = Inter sheet
+	*/
+	async function loadNumbers() {
+		// Sheet: "Loans, Renewals, Browses" - 2th sheet
+		// 	Extracts data for 1st table
+		// 	Each year(2021-2024) corresponds to a row with its appropriate values
+		const collectbody = document.querySelector("#collecInfo tbody");
+		const availableYearsColl = []
+		for(let i=1; i<collectJson.length && collectJson[i+1].length>1; i+=5) {
+			availableYearsColl.push(i);
+		}
+		const collectStart = availableYearsColl[availableYearsColl.length - 4]
+		for(let cRowYear=0; cRowYear<4; cRowYear++) {
+			let cRow = document.createElement("tr");
+			cRow.innerHTML = `
+				<tr>
+					<td class="info">${collectJson[collectStart + 5*cRowYear][0]}</td> <!-- year -->
+					<td class="numAnim">${collectJson[collectStart+1 + 5*cRowYear][13]}</td> <!-- loan -->
+					<td class="numAnim">${collectJson[collectStart+2 + 5*cRowYear][13]}</td> <!-- browses -->
+					<td class="numAnim">${collectJson[collectStart+3 + 5*cRowYear][13]}</td> <!-- renewals -->
+					<td class="numAnim">${collectJson[collectStart+4 + 5*cRowYear][13]}</td> <!-- returns -->
+				</tr>
+			`;
+			// Appends the row to the table
+			collectbody.appendChild(cRow);
+		}
+
+		// Sheet: "Inter Library Loans" - 3th sheet
+		// 	Extracts data for 2nd table
+		// 	Only accounts for latest 4 years. adjust the for loop to get more
+		const interbody = document.querySelector("#interInfo tbody");
+		const availableYearsInter = []
+		// *****CHANGE THE LINE BELOW, it works but not a great solution
+		for(let i=1; i<interJson.length && interJson[i+1][1]!==null; i+=4) {
+			availableYearsInter.push(i);
+		}
+		const interStart = availableYearsInter[availableYearsInter.length - 4]
+		for(let rowYear=0; rowYear<4; rowYear++) {
+			let row = document.createElement("tr");
+			row.innerHTML = `
+				<tr>
+					<td class="info">${interJson[interStart + 4*rowYear][0]}</td> <!-- year -->
+					<td class="numAnim">${interJson[interStart+1 + 4*rowYear][13]}</td> <!-- filled borrowing -->
+					<td class="numAnim">${interJson[interStart+2 + 4*rowYear][13]}</td> <!-- filled lending -->
+					<td class="numAnim">${interJson[interStart+3 + 4*rowYear][13]}</td> <!-- document delivery -->
+				</tr>
+			`;
+			// Appends the row to the table
+			interbody.appendChild(row);
+		}
+
+		numberAnim();
+	}
+
+	/*
+	* All elements with class "numAnim" will increment.
+	* Initially increments by a large amount until it reaches 75% of target val-25. 
+	* 	It then increments by a small amount until only 25 remains.
+	* 	From then on, numbers only increment by 1.
+	* Percentages were used to make all the numbers end around the same time, regardless of their value.
+	*
+	* Must run after excel sheets are processed, and the appropriate vals are placed into the page. 
+	* 	Otherwise the numAnim tags wont have numbers to increment.
+	*/
+	function numberAnim() {
+		var numbers = document.querySelectorAll(".numAnim");
+		numbers.forEach(function(num) {
+			var target = parseInt(num.textContent);
+			var target_reduced = target - 25;
+			var incrementL = target_reduced * 0.015;
+			var incrementS = target_reduced * 0.005;
+			var curr = 0;
+
+			function update() {
+				if(curr >= target_reduced) {
+					curr++;
+				}
+				else if(curr > target_reduced *.75 && curr < target_reduced) {
+					curr += incrementS;
+				}
+				else {
+					curr += incrementL;
+				}
+				if(curr >= target) {
+					num.textContent = target.toLocaleString();
+				}
+				else {
+					num.textContent = Math.round(curr).toLocaleString();
+					setTimeout(function() {requestAnimationFrame(update);}, 1);
+				}
+			}
+			update();
+		});
+	}
+
+	main();
+
+</script>
+
+
+</body>
